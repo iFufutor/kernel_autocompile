@@ -4,10 +4,15 @@ DIRECTORY=/opt/kernel
 CURRENT_VERSION=$(uname -r)
 REVISION=$(date +%Y%m%d)
 PROC=$(nproc)
-SPIN='-\|/'
 RED="\033[1;31m"
 GREEN="\033[1;32m"
 DEFCOLOR="\033[0m"
+
+if [[ $EUID -ne 0 ]]
+	then
+		echo -e "[${RED}FAIL${DEFCOLOR}]  This script must be run as root" 1>&2
+		exit 1
+fi
 
 if [[ -z $1 ]]
 	then
@@ -16,13 +21,6 @@ if [[ -z $1 ]]
 	else
 		VERSION=$1
 fi
-
-if [[ $EUID -ne 0 ]]
-	then
-		echo -e "[${RED}FAIL${DEFCOLOR}]  This script must be run as root" 1>&2
-		exit 1
-fi
-
 
 clear
 cat << "EOF"
