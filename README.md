@@ -14,3 +14,4 @@ chmod +x kernel_compilation.sh
 
 You have to pass the version of Linux Kernel version you want to compile, as argument of the script.
 `./kernel_compilation.sh 4.9` for example...
+
