@@ -5,11 +5,13 @@ CURRENT_VERSION=$(uname -r)
 REVISION=$(date +%Y%m%d)
 PROC=$(nproc)
 SPIN='-\|/'
-
+RED="\033[1;31m"
+GREEN="\033[1;32m"
+DEFCOLOR="\033[0m"
 
 if [[ -z $1 ]]
 	then
-		echo -e "Please specify kernel version as first argument.\nEx : ./kernel_compilation 4.9"
+		echo -e "[${RED}FAIL${DEFCOLOR}]  Please specify kernel version as first argument.\n        Ex : ./kernel_compilation 4.9"
 		exit 1
 	else
 		VERSION=$1
@@ -17,9 +19,11 @@ fi
 
 if [[ $EUID -ne 0 ]]
 	then
-		echo "This script must be run as root" 1>&2
+		echo -e "[${RED}FAIL${DEFCOLOR}]  This script must be run as root" 1>&2
 		exit 1
 fi
+
+
 clear
 cat << "EOF"
   _  __                    _
@@ -35,76 +39,97 @@ cat << "EOF"
 
 
 EOF
-echo "Installing dependencies..."
-apt-get -qq install -y git fakeroot build-essential ncurses-dev xz-utils libssl-dev bc
-apt-get -qq --no-install-recommends install kernel-package
+
+read -n1 -r -p "New packages will be installed on your system. Press any key to continue..."
+echo ""
+echo -e "Installing dependencies [...]"
+apt-get -qq install -y git fakeroot build-essential ncurses-dev xz-utils libssl-dev bc && apt-get -qq --no-install-recommends install kernel-package
+if [ $? -eq 0 ]
+	then
+		echo -e "        Installing dependencies        [${GREEN}OK${DEFCOLOR}]\n"
+	else
+		echo -e "        Installing dependencies        [${RED}FAIL${DEFCOLOR}]\n"
+		exit 1
+fi
 mkdir -p $DIRECTORY &&  cd $DIRECTORY
 if [ ! -d "linux-${VERSION}" ]
 	then
-		echo "Downloading sources..."
+		echo -e "Downloading sources [...]"
 		wget -q https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-${VERSION}.tar.xz
-		echo "Uncompressing..."
-		tar xf linux-${VERSION}.tar.xz 2>/dev/null &
-		PID=$!
-		i=0
-		while kill -0 $PID 2>/dev/null
-		do
-  			i=$(( (i+1) %4 ))
-  			printf "\r${SPIN:$i:1}"
-  			sleep .1
-		done
-		echo -e "\n"
+		if [ $? -eq 0 ]
+			then
+				echo -e "        Downloading sources            [${GREEN}OK${DEFCOLOR}]\n"
+			else
+				echo -e "        Downloading sources            [${RED}FAIL${DEFCOLOR}]\n"
+				exit 1
+		fi
+		echo -e "Uncompressing [...]"
+		tar xf linux-${VERSION}.tar.xz > /var/log/kernel_compilation.log 2>&1
+		if [ $? -eq 0 ]
+			then
+				echo -e "        Uncompressing                  [${GREEN}OK${DEFCOLOR}]\n"
+			else
+				echo -e "        Uncompressing                  [${RED}FAIL${DEFCOLOR}]\n"
+				exit 1
+		fi
 		rm linux-${VERSION}.tar.xz
 fi
-cd linux-${VERSION}
-echo -e "Do you want to use your default .config or generate a new one ? \n    1 : Use default .config \n    2 : Open menuconfig to generate a new one \n    3 : Download an optimized config file"
+cd $DIRECTORY/linux-${VERSION}
+echo -e "Do you want to use your default .config or generate a new one ? \n    1 : Use default .config \n    2 : Open menuconfig to generate a new one \n"
 while true
 do
 	read -p "Choice [1-2] : " MENUCONFIG
 	case $MENUCONFIG in
-		[1] ) 	echo "OK ! Using your old .config"
+		[1] ) 	echo -e "${GREEN}OK ! ${DEFCOLOR}Using your old .config\n"
 			cp /boot/config-$CURRENT_VERSION .config
 			break;;
-   		[2] ) 	make -s menuconfig
+   		[2] ) 	echo -e "${GREEN}OK ! ${DEFCOLOR}Opening menuconfig\n"
+			make -s menuconfig
 			break;;
-   		* )     echo "Please make a choice between [1-2]"
+   		* )     echo -e "${RED}FAIL ! ${DEFCOLOR}Please make a choice between [1-2]"
 			;;
   	esac
 done
-make-kpkg clean
-fakeroot make-kpkg --initrd --revision=$REVISION kernel_image kernel_headers --jobs $PROC
-echo "Do you want to install your just compiled kernel ?"
+echo -e "Compiling [...] (may take a while...)"
+make-kpkg clean >> /var/log/kernel_compilation.log 2>&1
+fakeroot make-kpkg --initrd --revision=$REVISION kernel_image kernel_headers --jobs $PROC >> /var/log/kernel_compilation.log 2>&1
+if [ $? -eq 0 ]
+	then
+		echo -e "        Compiling                      [${GREEN}OK${DEFCOLOR}]\n"
+	else
+		echo -e "        Compiling                      [${RED}FAIL${DEFCOLOR}]\n"
+		exit 1
+fi
+echo -e "Do you want to install your just compiled kernel ?"
 while true
 do
-        read -p "Choice [y-N] : " INSTALL
-        case $INSTALL in
-                [yY] )  echo "OK ! Installing your kernel"
-                        cd $DIRECTORY
-                        dpkg -i linux-headers-${VERSION}_${REVISION}_amd64.deb 2>/dev/null &
-						PID=$!
-						i=0
-						while kill -0 $PID 2>/dev/null
-						do
-  							i=$(( (i+1) %4 ))
-  							printf "\r${SPIN:$i:1}"
-  							sleep .1
-						done
-						echo -e "\n"
-                        dpkg -i linux-image-${VERSION}_${REVISION}_amd64.deb 2>/dev/null &
-						PID=$!
-						i=0
-						while kill -0 $PID 2>/dev/null
-						do
-  							i=$(( (i+1) %4 ))
-  							printf "\r${SPIN:$i:1}"
-  							sleep .1
-						done
-						echo -e "\n"
-                        echo "Successfully installed your kernel. Please reboot."
-                        break;;
-                [nN] )  echo "Your files are in "$DIRECTORY" and can be installed by yourself."
-                        break;;
-                * )     echo "Please enter y or N"
-                        ;;
-        esac
+    read -p "Choice [y-N] : " INSTALL
+    case $INSTALL in
+            [yY] )  echo -e "${GREEN}OK ! ${DEFCOLOR}Installing your kernel [...]"
+                    cd $DIRECTORY
+                    echo -e "Installing headers [...]"
+                    dpkg -i linux-headers-${VERSION}_${REVISION}_amd64.deb >> /var/log/kernel_compilation.log 2>&1
+                    if [ $? -eq 0 ]
+						then
+							echo -e "        Installing headers             [${GREEN}OK${DEFCOLOR}]\n"
+						else
+							echo -e "        Installing headers             [${RED}FAIL${DEFCOLOR}]\n"
+							exit 1
+					fi
+					echo -e "Installing image [...]"
+                    dpkg -i linux-image-${VERSION}_${REVISION}_amd64.deb >> /var/log/kernel_compilation.log 2>&1
+                    if [ $? -eq 0 ]
+						then
+							echo -e "        Installing image               [${GREEN}OK${DEFCOLOR}]\n"
+						else
+							echo -e "        Installing image.              [${RED}FAIL${DEFCOLOR}]\n"
+							exit 1
+					fi
+                    echo -e "${GREEN}Successfully installed${DEFCOLOR} your kernel. Please reboot."
+                    break;;
+            [nN] )  echo -e "Your files are in "$DIRECTORY" and can be installed by yourself."
+                    break;;
+            * )     echo -e "${RED}FAIL ! ${DEFCOLOR}]Please enter y or N"
+                    ;;
+    esac
 done
