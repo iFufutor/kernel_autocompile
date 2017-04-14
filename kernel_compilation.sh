@@ -73,6 +73,7 @@ if [ ! -d "linux-${VERSION}" ]
 		rm linux-${VERSION}.tar.xz
 fi
 cd $DIRECTORY/linux-${VERSION}
+touch REPORTING-BUGS
 echo -e "Do you want to use your default .config or generate a new one ? \n    1 : Use default .config \n    2 : Open menuconfig to generate a new one \n"
 while true
 do
